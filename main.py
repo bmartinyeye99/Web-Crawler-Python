@@ -46,30 +46,17 @@ def parse(df):
         print("Title : ", titleMatch)
         print("Director : ",directorMatch.group(1))
         print("Cast : ",)
-        #pattern = r'""nameText"":{""text"":".*?",'
+        castPattern = r'""cast"":{""edges"":(.*$)'
 
-        pattern = r'""cast"":{""edges"":\[(.*?)\]'
+        afterCast = re.findall(castPattern, text, re.MULTILINE)
+        afterCast = str(afterCast)
 
-        matches = re.findall(pattern, text)
+        pattern = r'"nameText"":{""text"":""([^"]+)"",""__typename"":""NameText""'
+        matches = re.findall(pattern, afterCast)
 
         for match in matches:
-            print(match)
-        # pattern = r'""cast"":.*?""nameText"":'
-        # match = re.search(pattern, text)
-        #
-        # if match:
-        #     print(match.group())
-        # if match:
-    #     extracted_content = match.group(1)
-    #     print(extracted_content)
-    # else:
-    #     print("No match found")
-    #
-    #     selected_columns = df.apply(lambda x: x.str.extract(pattern, expand=False)).any()
-    #
-    #     result_df = df.loc[:, selected_columns]
-    #
-    #     print(result_df)
+            print("\t",match)
+
 
 
 def crawl(url):
