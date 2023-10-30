@@ -167,6 +167,6 @@ df = pd.read_csv("web_data.csv")
 #row_to_save = df.iloc[0:1]
 parse(df)
 movie_tv_df = movie_tv_df.drop_duplicates(subset=['title', 'director'])
-movie_tv_df.to_csv('wtf.csv', index=False)
+movie_tv_df.to_csv('extraction.csv', index=False)
 
 
