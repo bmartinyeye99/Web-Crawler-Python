@@ -20,8 +20,8 @@ def crawl(url):
     queue = deque([(url, 0)])
 
     # Check if the 'web_data.csv' file already exists
-    if os.path.exists('web_data.csv'):
-        df = pd.read_csv('web_data.csv')
+    if os.path.exists('web_data2.csv'):
+        df = pd.read_csv('web_data2.csv')
     else:
         df = pd.DataFrame(columns=['URL', 'HTML_Content'])
 
@@ -68,7 +68,7 @@ def crawl(url):
             except requests.exceptions.RequestException as e:
                 print(f"Request Exception for {e}")
 
-    df.to_csv('web_data.csv', index=False)
+    df.to_csv('web_data2.csv', index=False)
     return df
 
 def find_alternative_links(html):
@@ -96,7 +96,8 @@ def is_valid_url(url):
                         'mediaviewer', 'characters', 'companycredits', "news", 'mediaindex', 'officialsites',
                        'locations','taglines','plotsummary','synopsis',"technical",
                        'keywords', 'parentalguide','trivia','goofs','crazycredits', 'quotes','alternateversions',
-                       'movieconnections','soundtracks','soundtrack','videogallery','awards','faq','reviews','externalsites']
+                       'movieconnections','soundtracks','soundtrack','videogallery','awards','faq','reviews','externalsites',
+                       'episodes']
 
     movie_tv_pattern = r'https://www\.imdb\.com/title/[^"\']*'
     person_pattern = r'https://www.imdb.com/name/[^"\']*'
@@ -116,34 +117,51 @@ def is_valid_url(url):
 
 
 def movie_series_parser(url,html_content):
-    titleReg = r'<title>(.*? IMDb)</title>'
-    directorReg = r'Directed by (.*?)(\.)'
-    titleMatch = re.findall(titleReg, html_content)
-    directorMatch = re.search(directorReg, html_content)
+    #titleReg = r'<title>(.*? IMDb)</title>'
+    titleReg = r'<title>(.*?)\(+(.*)- IMDb<\/title'
+    #directorReg = r'Directed by (.*?)#[\.\s|\.\n]With'#(\.)'
+    directorReg = r'Directed by (.*?)(?=\.\sWith)'
+    creatorReg = r'Created by (.*?)(?=\.\sWith)'
+    titleMatch = re.search(titleReg, html_content)
+    directorMatch = None
+    directors = ''
+    if "(TV Series " in html_content:
+        directorMatch = re.search(creatorReg, html_content)
+    else: directorMatch = re.search(directorReg,html_content)
 
     if titleMatch:
-        print("Title:", titleMatch[0])
+        print("Title:", titleMatch.group(1))
     if directorMatch:
-        print("Director:", directorMatch.group(1))
+        directors = directorMatch.group(1)
+        # if directors == '{directorsOrCreatorsString}':
+        #     directorMatch = re.search(creatorReg,html_content)
+        #     print("Director:",directorMatch.group(1))
+    else: directors = 'more'
 
     castPattern = r'"cast":\{"edges":(.*$)'
     afterCast = re.search(castPattern, html_content, re.MULTILINE)
-
+    matches = []
     if afterCast:
         castData = afterCast.group(1)
         pattern = r'"nameText":\{"text":"([^"]+)","__typename":"NameText"'
         matches = re.findall(pattern, castData)
-        # if matches:
-        #     print("Cast:")
-        #     for match in matches:
-        #         print("\t", match)
-    new_row = {'url': url, 'type': "M/S", 'title': titleMatch[0], 'director': directorMatch.group(1), 'cast': matches}
+        matches.pop()
+
+    new_row = {'url': url, 'type': "M/S", 'title': titleMatch.group(1), 'director': directors, 'cast': matches}
+    if new_row['director'] == '{directorsOrCreatorsString}' or '{directorsOrCreatorsString}' in directors:
+        new_row.update({'director': 'more'})
     movie_tv_df.loc[len(movie_tv_df)] = new_row
 
 def parse(df):
     for index, row in df.iterrows():
         url_value = row['URL']
-        print(url_value)
+        if url_value == "https://www.imdb.com/title/tt11057302/?ref_=rlm":
+            with open("demofile3.txt", "w", encoding="utf-8") as f:
+                f.write(df['HTML_Content'].iloc[index])
+        if url_value == "https://www.imdb.com/title/tt10676048/?ref_=rlm":
+            with open("demofile2.txt", "w", encoding="utf-8") as f:
+                f.write(df['HTML_Content'].iloc[index])
+
         tmp = is_valid_url(url_value)
         if tmp == -1:
             continue
@@ -157,13 +175,13 @@ def parse(df):
 
 
 
-url = 'https://www.imdb.com/title/tt28335725/?ref_=hm_inth_tt_t_2'
+url = 'https://www.imdb.com/title/tt1190634/?ref_=nv_sr_srsg_0_tt_8_nm_0_q_the%2520boy'
 #webpages = crawl(url)
 
 movie_tv_df = pd.DataFrame(columns=['url', 'type', 'title', 'director', 'cast'])
 person_df = pd.DataFrame(columns=['url', 'type', 'name', 'roles', 'directed_movies'])
 
-df = pd.read_csv("web_data.csv")
+df = pd.read_csv("web_data2.csv")
 #row_to_save = df.iloc[0:1]
 parse(df)
 movie_tv_df = movie_tv_df.drop_duplicates(subset=['title', 'director'])
