@@ -1,5 +1,4 @@
 import re
-
 from bs4 import BeautifulSoup
 import os
 
@@ -13,13 +12,13 @@ def process_and_save_chunk(chunk, output_file):
         with open(output_file, 'a', encoding='utf-8') as file:
             file.write(plain_text)
 
-def extract_links(txt):
+def extract_links(txt,keywords):
     linkPattern = r'\/\/en(.*?)(?:\s|$|:|,)'
     matches = re.findall(linkPattern, txt)
     modified_matches = ["//en" + match for match in matches]
-    find_keywords(modified_matches)
+    find_keywords_in_links(modified_matches, keywords)
 
-def find_keywords(links):
+def find_keywords_in_links(links, keywords):
     modified_keywords = []
     for word in keywords:
         word = word.replace(' ', '_')
@@ -35,7 +34,8 @@ def find_keywords(links):
                 break
     print(matching_links)
 
-def open_xml():
+def open_xml(file_path,output_text_file,keywords):
+    chunk_size = 10000
     if not os.path.exists(output_text_file):
         with open(output_text_file, 'w', encoding='utf-8'):
             pass
@@ -49,13 +49,14 @@ def open_xml():
     else:
         f = open(output_text_file, 'r', encoding='utf-8')
         txt = f.read()
-        extract_links(txt)
-
-file_path = 'enwiki-latest-abstract1.xml'
-output_text_file = file_path + '_stripped_text'
-chunk_size = 10000
-keywords = ["Star Wars", 'Star Trek']
-open_xml()
+        extract_links(txt,keywords)
 
 
+def link_to_wiki():
+    file_path = 'enwiki-latest-abstract1.xml'
+    output_text_file = file_path + '_stripped_text'
+    keywords = ["Star Wars", 'Star Trek']
+    open_xml(file_path,output_text_file,keywords)
 
+
+link_to_wiki()

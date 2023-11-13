@@ -14,7 +14,7 @@ def crawl(url):
         'Accept-Language': 'en-US'
     }
     response = requests.get(url, headers=hdr)
-    max_size_mb = 200
+    max_size_mb = 7000
     crawled_links = set()
     queue = deque([(url, 0)])
     while queue:
@@ -51,13 +51,7 @@ def crawl(url):
             except requests.exceptions.RequestException as e:
                 print(f"Request Exception for {e}")
 
-    # if os.path.exists('web_data2.csv'):
-    #     try:
-    #         responses_df.to_csv('web_data2.csv', mode='a', index=False, header=False)
-    #     except Exception as e:
-    #         print(f"Error writing to CSV: {e}")
-    # else:
-    #     responses_df.to_csv('web_data2.csv', index=False)
+
 
 def find_alternative_links(html):
     movie_tv_pattern = r'/title/[^"\']*'
@@ -90,10 +84,8 @@ def is_valid_url(url):
     person_pattern = r'https://www.imdb.com/name/[^"\']*'
     if re.match(movie_tv_pattern, url) and not any(word in url for word in restrictedWords):
         return 1
-
     elif re.match(person_pattern, url):
         return 0
-
     else:
         return -1
 
@@ -158,7 +150,7 @@ def parse(df):
         elif tmp == 0:
             movie_series_parser(url_value,html_content)
 
-url = 'https://www.imdb.com/title/tt7939766/?ref_=hm_tpks_tt_i_26_pd_tp1_pbr'
+url = 'https://www.imdb.com/title/tt0104257/?ref_=nv_sr_srsg_3_tt_8_nm_0_q_for%2520a%2520few%2520'
 
 # if os.path.exists('extraction_movies.csv'):
 #     movie_tv_df = pd.read_csv("extraction_movies.csv",encoding='utf-8')
