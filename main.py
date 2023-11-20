@@ -26,11 +26,11 @@ def save_data_to_csv(df_no_duplicates_subset,file):
     size_mb = size_bytes / (1024 * 1024)
     print(f"Size of '{extraction_file}': {size_mb:.2f} MB")
 
-    if size_mb > 300:
-        print(f"Size of '{extraction_file}': {size_mb:.2f} MB")
-        return 1
-    else:
-        return 0
+    # if size_mb > 300:
+    #     print(f"Size of '{extraction_file}': {size_mb:.2f} MB")
+    #     return 1
+    # else:
+    #     return 0
 
 
 def crawl(url,responses_df,movie_tv_df, size):
@@ -39,7 +39,7 @@ def crawl(url,responses_df,movie_tv_df, size):
         'Accept-Language': 'en-US'
     }
     response = requests.get(url, headers=hdr)
-    max_size_mb = size
+    max_size_mb = 500
     crawled_links = set()
     queue = deque([(url, 0)])
     while queue:
@@ -60,16 +60,15 @@ def crawl(url,responses_df,movie_tv_df, size):
                     alternative_links = find_alternative_links(html_content)
                     links.extend(alternative_links)
                     for link in links:
-                        if link not in crawled_links and link not in movie_tv_df['url'].values:
+                        if link not in crawled_links:
                             queue.append((link, depth + 1))
-                    # for link in alternative_links:
-                    #     if link not in crawled_links:
-                    #         queue.append((link, depth + 1))
-                    if current_url not in responses_df['URL'].values :
+                    if current_url not in responses_df['url'].values and current_url not in movie_tv_df['url'].values :
                         responses_df.loc[len(responses_df.index)] = [current_url, html_content]
+                        print(current_url)
+                        max_size_mb += 1
                     df_size_mb = get_dataframe_size_megabytes(responses_df)
                     print(df_size_mb)
-                    if df_size_mb >= max_size_mb:
+                    if df_size_mb <= max_size_mb:
                         print(f"DataFrame size exceeded {max_size_mb} MB. Stopping crawl.")
                         break
                 else:
@@ -120,6 +119,7 @@ def create_new_row(url,titleMatch,directors,matches,movie_tv_df):
             new_row.update({'director': 'more'})
         if new_row['url'] not in movie_tv_df['url'].values:
             if new_row['director'] not in movie_tv_df['director'].values and new_row['title'] not in movie_tv_df['title']:
+                print("URL:",url)
                 movie_tv_df.loc[len(movie_tv_df)] = new_row
 
 def movie_series_parser(url,html_content,movie_tv_df):
@@ -153,8 +153,9 @@ def movie_series_parser(url,html_content,movie_tv_df):
 
 def parse(df,movie_tv_df):
     for index, row in df.iterrows():
-        url_value = df['URL'].iloc[index]
+        url_value = df['url'].iloc[index]
         html_content = df['HTML_Content'].iloc[index]
+        print(url_value)
         if url_value  in movie_tv_df['url'].values:
             continue
         tmp = is_valid_url(url_value)
@@ -163,35 +164,53 @@ def parse(df,movie_tv_df):
         elif tmp == 1:
             movie_series_parser(url_value,html_content,movie_tv_df)
 
+def open_raw_responses_csv(file):
+    if os.path.exists(file):
+        try:
+            if file == "responses.csv":
+                df = pd.read_csv("responses.csv")
+                print("File loaded successfully.")
+            elif file == "extraction_movies.csv":
+                df = pd.read_csv("extraction_movies.csv")
+                print("File loaded successfully.")
+        except Exception as e:
+            print(f"Error loading file: {e}")
+    else:
+        if file == "responses.csv":
+            df = pd.DataFrame(columns=['url', 'HTML_Content'])
+            df.to_csv("responses.csv", index=False)
+        elif file == "extraction_movies.csv":
+            df = pd.DataFrame(columns=['url', 'title', 'director', 'cast'])
+            df.to_csv("extraction_movies.csv", index=False)
+        print("New file created successfully.")
 
+    return df
+# def crawlresp(urls,responses_df):
+#     hdr = {
+#         'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Mobile Safari/537.36',
+#         'Accept-Language': 'en-US'
+#     }
+#     for url in urls:
+#         response = requests.get(url, headers=hdr)
+#         time.sleep(0.2)
+#         if response.status_code == 200:
+#             html_content = response.text
+#             if url not in responses_df['url'].values:
+#                 responses_df.loc[len(responses_df.index)] = [url, html_content]
+#     print(responses_df)
 def init_crawl(url):
-    responses_df = pd.DataFrame(columns=['URL', 'HTML_Content'])
-    movie_tv_df = pd.DataFrame(columns=['url', 'title', 'director', 'cast'])
+    responses_df = open_raw_responses_csv("responses.csv")
+    movie_tv_df = open_raw_responses_csv("extraction_movies.csv")
     size = 500
-    while True:
-        crawl(url,responses_df,movie_tv_df,size)
-        parse(responses_df,movie_tv_df)
-        df_no_duplicates_subset = movie_tv_df.drop_duplicates(subset=['url'])
-        if save_data_to_csv(df_no_duplicates_subset,'extraction_movies.csv') == 1:
-            break
-        else:
-            continue
-        # if os.path.exists('extraction_movies.csv'):
-        #     try:
-        #         df_no_duplicates_subset.to_csv('extraction_movies.csv', mode='a', index=False, header=False)
-        #     except Exception as e:
-        #         print(f"Error writing to CSV: {e}")
-        # else:
-        #     df_no_duplicates_subset.to_csv('extraction_movies.csv', index=False)
+    #crawlresp(url_list,responses_df)
+    crawl(url,responses_df,movie_tv_df,size)
+    save_data_to_csv(responses_df,"responses.csv")
+    parse(responses_df,movie_tv_df)
+    df_no_duplicates_subset = movie_tv_df.drop_duplicates(subset=['url'])
+    save_data_to_csv(df_no_duplicates_subset,'extraction_movies.csv')
 
     return
 
-
-# for i in range(3):
-#     urls = ['https://www.imdb.com/title/tt1979320/?ref_=nv_sr_srsg_0_tt_6_nm_2_q_rush',
-#             'https://www.imdb.com/title/tt0083944/?ref_=nv_sr_srsg_0_tt_8_nm_0_q_first%2520b',
-#             'https://www.imdb.com/title/tt0094625/?ref_=nv_sr_srsg_0_tt_3_nm_5_q_Akira'
-#             ]
 init_crawl('https://www.imdb.com/')
 
 

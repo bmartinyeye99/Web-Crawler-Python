@@ -1,11 +1,30 @@
+from whoosh import scoring
 from whoosh.fields import TEXT, ID, Schema
 from whoosh.index import create_in
 import os
 from whoosh.index import open_dir
 from whoosh.writing import AsyncWriter
 import pandas as pd
-from whoosh.qparser import QueryParser
+from whoosh.qparser import QueryParser, MultifieldParser
 from whoosh.searching import Searcher
+
+def search_index(keyword, index_dir):
+    # Open the index
+    index = open_dir(index_dir)
+    # Create a searcher object
+    searcher = index.searcher(weighting=scoring.TF_IDF())
+    # Create a QueryParser
+    query_parser = MultifieldParser(["title", "director", "cast"], schema=schema)
+    # Parse the query
+    query = query_parser.parse(keyword)
+    # Search the index
+    results = searcher.search(query)
+
+    print("Search Results:")
+    for result in results:
+        print("\n MOVIE :")
+        print(f"Title: {result['title']}, Director: {result['director']}, Cast: {result['cast']}")
+    searcher.close()
 
 webpages = pd.read_csv("extraction_movies.csv")
 schema = Schema(
@@ -30,3 +49,6 @@ with index.writer() as writer:
             director=row['director'],
             cast=row['cast']
         )
+
+search_keyword = "David Fincher"
+search_index(search_keyword, index_dir)
