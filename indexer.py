@@ -35,7 +35,7 @@ schema = Schema(
     cast=TEXT(stored=True)
 )
 
-index_dir = "D:\MRc\FIIT\ING\sem 1\VINF\Web Scrapper\index_directory"
+index_dir = "index_directory"
 if not os.path.exists(index_dir):
     os.mkdir(index_dir)
 

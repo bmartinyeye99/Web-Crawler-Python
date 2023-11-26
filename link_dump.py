@@ -82,17 +82,17 @@ keywords = ["Star Wars","Star Trek"]
 links = link_to_dump(keywords)
 print(links)
 wikitext,links = strip_wiki(links)
-for i in range(len(wikitext)):
-    title = ''.join(keywords).replace(' ', '_')
-    filename = title + '_' + str(i) + ".txt"
-    if os.path.exists(filename):
-        with open(filename, 'w',encoding='utf-8') as file:
-            stripped_wikitext = strip_newlines_and_whitespace(wikitext[i])
-            file.write(stripped_wikitext)
-    else:
-        with open(filename, 'w',encoding='utf-8') as file:
-            stripped_wikitext = strip_newlines_and_whitespace(wikitext[i])
-            file.write(stripped_wikitext)
+# for i in range(len(wikitext)):
+#     title = ''.join(keywords).replace(' ', '_')
+#     filename = title + '_' + str(i) + ".txt"
+#     if os.path.exists(filename):
+#         with open(filename, 'w',encoding='utf-8') as file:
+#             stripped_wikitext = strip_newlines_and_whitespace(wikitext[i])
+#             file.write(stripped_wikitext)
+#     else:
+#         with open(filename, 'w',encoding='utf-8') as file:
+#             stripped_wikitext = strip_newlines_and_whitespace(wikitext[i])
+#             file.write(stripped_wikitext)
 
 # output_file = 'output.txt'
 # with open(output_file, 'w', encoding='utf-8') as file:
