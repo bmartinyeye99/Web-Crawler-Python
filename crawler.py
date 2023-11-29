@@ -164,7 +164,7 @@ def parse(df,movie_tv_df):
         elif tmp == 1:
             movie_series_parser(url_value,html_content,movie_tv_df)
 
-def open_raw_responses_csv(file):
+def open_csv_files(file):
     if os.path.exists(file):
         try:
             if file == "responses.csv":
@@ -199,9 +199,11 @@ def open_raw_responses_csv(file):
 #                 responses_df.loc[len(responses_df.index)] = [url, html_content]
 #     print(responses_df)
 def init_crawl(url):
-    responses_df = open_raw_responses_csv("responses.csv")
-    movie_tv_df = open_raw_responses_csv("extraction_movies.csv")
+    responses_df = open_csv_files("responses.csv")
+    movie_tv_df = open_csv_files("extraction_movies.csv")
     size = 500
+
+    print('xxxxx')
     #crawlresp(url_list,responses_df)
     crawl(url,responses_df,movie_tv_df,size)
     save_data_to_csv(responses_df,"responses.csv")
@@ -212,5 +214,11 @@ def init_crawl(url):
     return
 
 init_crawl('https://www.imdb.com/')
+
+movie_tv_df = pd.read_csv("extraction_movies.csv")
+for column in ['director', 'title']:
+    movie_tv_df[column] = movie_tv_df[column].str.replace('&#x27;', "'")
+
+movie_tv_df.to_csv("extraction_movies_modified.csv", index=False)
 
 
