@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import os
-
+from parse_wiki import open_wiki_link
 def strip_xml(xml_content):
     try:
         soup = BeautifulSoup(xml_content, 'xml')
@@ -39,9 +39,9 @@ def process_and_save_chunk(chunk, output_file):
 
 def extract_links(txt, keywords):
     try:
-        linkPattern = r'\/\/en(.*?)(?:\s|$|:|,)'
+        linkPattern = r'https:\/\/en(.*?)(?:\s|$|:|,)'
         matches = re.findall(linkPattern, txt)
-        modified_matches = ["//en" + match for match in matches]
+        modified_matches = ["https://en" + match for match in matches]
         extracted = find_keywords_in_links(modified_matches, keywords)
         return extracted
     except re.error as re_ex:
@@ -100,7 +100,8 @@ def link_to_dump(keywords):
 
 def extract_keyword_from_csv():
 
-    movies = pd.read_csv("extraction_movies_modified.csv")
+    movies = pd.read_csv("extraction_movies_modified_with_columns.csv")
+
     for index, row in movies.iterrows():
         links = []
         httpslinks = []
@@ -108,16 +109,25 @@ def extract_keyword_from_csv():
 
         title = str(row['title'])
         director = str(row['director'])
-        keywords.append(title)
+        keywords.append( "Star Trek")
         if director != 'more':
             keywords.append(director)
         print("Keywords : ",keywords)
-        links = link_to_dump(keywords)
+        httpslinks = link_to_dump(keywords)
 
-        for link in links:
-            if not link.startswith(('http://', 'https://')):
-                link = 'https:' + link
-                httpslinks.append(link)
+
         print("Link for keywords : ",httpslinks)
+        release_date, writer, composerMatch, director_match = open_wiki_link(keywords,httpslinks)
+        if release_date != None:
+            row['release date'] = release_date
+        if writer != None:
+            row['writer'] = release_date
+        if composerMatch != None:
+            row['music by'] = composerMatch
+        if row['director'] == 'more' and director_match != None:
+            row['director'] = director_match
+
+    movies.to_csv("extraction_movies_modified_with_columns.csv", index=False)
+
 
 extract_keyword_from_csv()
