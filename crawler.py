@@ -5,6 +5,7 @@ from collections import deque
 import pandas as pd
 import time
 from pathlib import Path
+#
 def get_dataframe_size_megabytes(dataframe):
     return dataframe.memory_usage(deep=True).sum() / (1024 * 1024)
 
@@ -185,25 +186,26 @@ def open_csv_files(file):
         print("New file created successfully.")
 
     return df
-# def crawlresp(urls,responses_df):
-#     hdr = {
-#         'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Mobile Safari/537.36',
-#         'Accept-Language': 'en-US'
-#     }
-#     for url in urls:
-#         response = requests.get(url, headers=hdr)
-#         time.sleep(0.2)
-#         if response.status_code == 200:
-#             html_content = response.text
-#             if url not in responses_df['url'].values:
-#                 responses_df.loc[len(responses_df.index)] = [url, html_content]
-#     print(responses_df)
+
+def crawlresp(urls,responses_df):
+    hdr = {
+        'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Mobile Safari/537.36',
+        'Accept-Language': 'en-US'
+    }
+    for url in urls:
+        response = requests.get(url, headers=hdr)
+        time.sleep(0.2)
+        if response.status_code == 200:
+            html_content = response.text
+            if url not in responses_df['url'].values:
+                responses_df.loc[len(responses_df.index)] = [url, html_content]
+    print(responses_df)
+
 def init_crawl(url):
     responses_df = open_csv_files("responses.csv")
     movie_tv_df = open_csv_files("extraction_movies.csv")
     size = 500
 
-    print('xxxxx')
     #crawlresp(url_list,responses_df)
     crawl(url,responses_df,movie_tv_df,size)
     save_data_to_csv(responses_df,"responses.csv")
@@ -213,12 +215,21 @@ def init_crawl(url):
 
     return
 
-init_crawl('https://www.imdb.com/')
+def clear_parse_data(df):
+    for column in ['director', 'title']:
+        movie_tv_df[column] = movie_tv_df[column].str.replace('&#x27;', "'")
+        movie_tv_df[column] = movie_tv_df[column].str.replace('&quot;', '"')
+        df[column] = df[column].str.replace('\s+', ' ',regex=True)  # Replace consecutive white spaces with a single space
+        df[column] = df[column].str.strip()
+    movie_tv_df["director"] = movie_tv_df["director"].apply(lambda x: [director.strip() for director in x.split(',')])
+    df.to_csv("extraction_movies_modified.csv", index=False)
+    return df
 
-movie_tv_df = pd.read_csv("extraction_movies.csv")
-for column in ['director', 'title']:
-    movie_tv_df[column] = movie_tv_df[column].str.replace('&#x27;', "'")
+#init_crawl('https://www.imdb.com/')
 
-movie_tv_df.to_csv("extraction_movies_modified.csv", index=False)
-
-
+movie_tv_df = pd.read_csv("extraction_movies_modified.csv")
+cleared = clear_parse_data(movie_tv_df)
+#
+#
+record_9_directors = cleared.loc[6, 'director']
+print(f"Directors for the 9th record: {record_9_directors}")
