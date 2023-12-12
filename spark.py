@@ -1,11 +1,12 @@
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.functions import col, udf, expr, array_intersect
+from pyspark.sql.functions import col, udf, expr, array_intersect, lit, array
 from pyspark.sql.functions import col, regexp_replace
 from bs4 import BeautifulSoup
 from pyspark.sql.functions import udf
-from pyspark.sql.types import StringType, ArrayType
+from pyspark.sql.types import StringType, ArrayType, size, BooleanType
 from pyspark.sql.types import StringType, StructType, StructField
+from pyspark.sql import Row
 import json
 import re
 import findspark
@@ -36,15 +37,15 @@ def find_director(text):
 def extract_music(text):
     pattern_for_more = r"\|\s*music\s*=\s*{{plainlist\|([\s\S]*?)\s*}}"
     patter_for_one = 'music\s*=\s*\[\[(.*)\]\]'
-    err = "not found"
+    err = ["not found"]
     if re.findall(pattern_for_more, text):
         result = re.findall(pattern_for_more, text)
-        cleaned_string = result[0].replace('*', '').replace('[[', '').replace(']]', '').replace('\n', ', ').strip()
-        cleaned_string = ' '.join(cleaned_string.split()).lstrip(',').strip()
-        return cleaned_string if result else ("%s" % err)
+        result[0] = result[0].replace('<br\s*/?>', '; ').replace('*', '').replace('[[', '').replace(']]', '').replace('\n', ', ').strip()
+        result[0] = ' '.join(result[0].split()).lstrip(',').strip()
+        return [result[0].strip() for str in result[0].split(';')] if result else ['not found']
     elif re.search(patter_for_one,text):
         result = re.search(patter_for_one, text)
-        return result.group(1) if result else err
+        return [result.group(1)] if result else err
     else:
         return err
 def extract_release_date(text):
@@ -91,43 +92,79 @@ def load_movies():
         StructField("director", StringType(), True)  # Assume "director" column in the CSV is of type StringType
     ])
     movie_tv_df = pd.read_csv("extraction_movies_modified.csv")
-    movie_tv_df.drop(['url', 'cast'], axis='columns', inplace=True)
+    movie_tv_df.drop(['url'], axis='columns', inplace=True)
     movie_tv_sparkdf = spark.createDataFrame(movie_tv_df, schema=schema2)
     movie_tv_sparkdf = movie_tv_sparkdf.withColumn("director_list", string_to_list("director"))
     movie_tv_sparkdf = movie_tv_sparkdf.drop('director')
     return movie_tv_sparkdf
 
 
+@udf(BooleanType())
+def check_intersection(list1, list2):
+    if 'more' in list1:
+        return True
+    return bool(set(list1) & set(list2))
+
+@udf(ArrayType(StringType()))
+def create_array():
+    return ['not found']
+
 findspark.init()
 spark = SparkSession.builder.config("spark.jars.packages", "com.databricks:spark-xml_2.12:0.13.0").getOrCreate()
 
 raw_data = spark.read.format("com.databricks.spark.xml").option("rowTag", "page").schema(schema).load(
-    "enwiki-latest-pages-articles17.xml-p20570393p22070392")
+    "enwiki-latest-pages-articles.xml")
 
 filtered_film_data = raw_data.filter(
     (col("revision.text._VALUE").contains("Infobox film")) &
     (col("revision.text._VALUE").rlike(r'\{\{\s*Infobox\s*film\s*\|'))
 )
 
-#filtered_film_data.select("title", "revision.text._VALUE").show(truncate=False)
 
-#print(filtered_film_data.first())
 custom_title_udf = udf(format_date, StringType())
-custom_text_udf = udf(find_director, StringType())
+custom_director_udf = udf(find_director, StringType())
 custom_music = udf(extract_music, StringType())
 custom_release = udf(extract_release_date, StringType())
 spark.udf.register("list_contains_any", list_contains_any)
+custom_director_udf = udf(find_director, ArrayType(StringType()))
 
 extracted_data = filtered_film_data \
     .withColumn("title_wiki", custom_title_udf(col("title"))) \
-    .withColumn("director_wiki", custom_text_udf(col("revision.text._VALUE"))) \
+    .withColumn("director_wiki", custom_director_udf(col("revision.text._VALUE"))) \
     .withColumn("music", custom_music(col("revision.text._VALUE"))) \
     .withColumn("release", custom_release(col("revision.text._VALUE"))) \
-    .select("title", "director_wiki",'music','release')
+    .select("title_wiki", "director_wiki", 'music', 'release')
 
 crawled = load_movies()
-print("Schema for crawled DataFrame:")
-crawled.printSchema()
 
-print("\nSchema for extracted_data DataFrame:")
-extracted_data.printSchema()
+initial_joined_data = crawled.join(
+    extracted_data,
+    crawled.title == extracted_data.title_wiki,
+    "left"
+)
+
+column_name = "director_wiki"
+initial_joined_data = initial_joined_data.withColumn(column_name,
+                                            F.when(initial_joined_data[column_name].isNull(),
+                                            create_array()).otherwise(initial_joined_data[column_name]))
+
+
+final_joined_data = initial_joined_data \
+    .where(
+        (check_intersection(initial_joined_data.director_list, initial_joined_data.director_wiki))
+)
+
+def precision_recall():
+
+    precia = load_movies().toPandas()
+    precib = pd.read_csv("final_merged.csv.csv")
+
+    true_positives = len(precib)
+    false_positives = len(precia) - true_positives
+    false_negatives = len(extracted_data.toPandas()) - true_positives
+
+    precision = true_positives / (true_positives + false_positives)
+    recall = true_positives / (true_positives + false_negatives)
+
+
+final_joined_data.toPandas().to_csv('merged.csv', index=False)
