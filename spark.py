@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.functions import col, udf, expr, array_intersect, lit, array
+from pyspark.sql.functions import col, udf, expr, array_intersect, lit, array, array_contains
 from pyspark.sql.functions import col, regexp_replace
 from bs4 import BeautifulSoup
 from pyspark.sql.functions import udf
@@ -11,8 +11,11 @@ import json
 import re
 import findspark
 import pandas as pd
+from sklearn.metrics import precision_score, recall_score
 
 
+SMALL_XML = 'enwiki-latest-pages-articles17.xml-p20570393p22070392'
+BIG_XML = 'enwiki-latest-pages-articles.xml'
 def list_contains_any(element, target_list):
     return any(e in target_list for e in element)
 
@@ -67,10 +70,10 @@ def extract_release_date(text):
     else:
         return err
 
+# Remove brackets and quotes and split the string to get a list of strings
 @udf(ArrayType(StringType()))
 def string_to_list(director_str):
     if director_str is not None:
-        # Remove brackets and quotes and split the string to get a list of strings
         return [item.strip(" '") for item in director_str.strip("[]").split(",")]
     else:
         return []
@@ -96,6 +99,7 @@ def load_movies():
     movie_tv_sparkdf = spark.createDataFrame(movie_tv_df, schema=schema2)
     movie_tv_sparkdf = movie_tv_sparkdf.withColumn("director_list", string_to_list("director"))
     movie_tv_sparkdf = movie_tv_sparkdf.drop('director')
+    movie_tv_sparkdf = movie_tv_sparkdf.drop_duplicates(['title','director_list'])
     return movie_tv_sparkdf
 
 
@@ -109,18 +113,114 @@ def check_intersection(list1, list2):
 def create_array():
     return ['not found']
 
+# function laods whole xml file, ad filters out all pages, where movie infobox is present
+def load_wiki_data():
+    raw_data = spark.read.format("com.databricks.spark.xml").option("rowTag", "page").schema(schema).load(
+        BIG_XML)
+
+    filtered_film_data = raw_data.filter(
+        (col("revision.text._VALUE").contains("Infobox film")) &
+        (col("revision.text._VALUE").rlike(r'\{\{\s*Infobox\s*film\s*\|'))
+    )
+    return filtered_film_data
+
+# function extracts searched data from the pool of wiki movie infoboxes
+def extract_data_from_wiki():
+    extracted_data = movie_wiki_dadta \
+        .withColumn("title_wiki", custom_title_udf(col("title"))) \
+        .withColumn("director_wiki", custom_director_udf(col("revision.text._VALUE"))) \
+        .withColumn("music", custom_music(col("revision.text._VALUE"))) \
+        .withColumn("release", custom_release(col("revision.text._VALUE"))) \
+        .select("title_wiki", "director_wiki", 'music', 'release')
+    return extracted_data
+
+# joins wiki and imdb data on matching director and title columns
+# def join_df(extracted_data,crawled_data):
+#     initial_joined_data = (crawled_data.join(extracted_data,crawled_data.title == extracted_data.title_wiki,"leftouter"))
+#     column_name = "director_wiki"
+#     initial_joined_data = initial_joined_data.withColumn(column_name,
+#                                                          F.when(initial_joined_data[column_name].isNull(),
+#                                                                 create_array()).otherwise(
+#                                                              initial_joined_data[column_name]))
+#     final_joined_data = initial_joined_data \
+#         .where(
+#         (check_intersection(initial_joined_data.director_list, initial_joined_data.director_wiki))
+#     )
+#     return final_joined_data
+
+def join_df(extracted_data, crawled_data):
+    initial_joined_data = crawled_data.join(
+        extracted_data,
+        (
+            (crawled_data.title == extracted_data.title_wiki) &
+            (F.size(F.array_intersect(crawled_data.director_list, extracted_data.director_wiki)) > 0)
+        ) |
+        (
+            (crawled_data.title == extracted_data.title_wiki) &
+            (array_contains(crawled_data.director_list, 'more'))
+        ),
+        "leftouter"
+    )
+
+    # Replace null values in the joined columns with empty arrays
+    # column_name = "director_wiki",'music','release','title_wiki'
+    # for c in column_name:
+    #     initial_joined_data = initial_joined_data.withColumn(
+    #         c,
+    #         F.when(F.col(c).isNull(), F.array()).otherwise(F.col(c))
+    #     )
+
+    # Keep all records from crawled_data
+    final_joined_data = initial_joined_data
+
+    return final_joined_data
+
+def precision_recall():
+    merged_df = pd.read_csv("small_merged.csv")
+    # methond 1
+    ###########
+    # Step 1: Identify True Positives (TP)
+    true_positives = merged_df[['director_list', 'director_wiki']].dropna().apply(
+        lambda x: x[0].lower() == x[1].lower(), axis=1).sum()
+
+    # Step 2: Identify False Positives (FP)
+    false_positives = len(merged_df) - true_positives
+    # Step 3: Identify False Negatives (FN)
+    false_negatives = merged_df[['title_wiki', 'title']].apply(
+        lambda x: pd.notna(x[0]) and pd.notna(x[1]) and not (x[0].lower() == x[1].lower()), axis=1).sum()
+    # Step 4: Calculate Precision
+    precision_denominator = true_positives + false_positives
+    precision = true_positives / precision_denominator if precision_denominator > 0 else 0
+    # Step 5: Calculate Recall
+    recall_denominator = true_positives + false_negatives
+    recall = true_positives / recall_denominator if recall_denominator > 0 else 0
+    print(f"Precision: {precision:.2f}")
+    print(f"Recall: {recall:.2f}")
+
+
+    # method 2
+    ###########
+    for index, row in merged_df.iterrows():
+        if pd.notna(row['title_wiki']) and pd.notna(row['director_wiki']):
+            # Check if it's a match
+            if row['title'].lower() == row['title_wiki'].lower() and row['director_list'].lower() == row['director_wiki'].lower():
+                true_positives += 1
+            else:
+                false_positives += 1
+        else:
+            false_negatives += 1
+    precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+    recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+    print(f"Precision: {precision:.2f}")
+    print(f"Recall: {recall:.2f}")
+
 findspark.init()
 spark = SparkSession.builder.config("spark.jars.packages", "com.databricks:spark-xml_2.12:0.13.0").getOrCreate()
 
-raw_data = spark.read.format("com.databricks.spark.xml").option("rowTag", "page").schema(schema).load(
-    "enwiki-latest-pages-articles.xml")
+#loading data from dump
+movie_wiki_dadta = load_wiki_data()
 
-filtered_film_data = raw_data.filter(
-    (col("revision.text._VALUE").contains("Infobox film")) &
-    (col("revision.text._VALUE").rlike(r'\{\{\s*Infobox\s*film\s*\|'))
-)
-
-
+# defining custom udf functions
 custom_title_udf = udf(format_date, StringType())
 custom_director_udf = udf(find_director, StringType())
 custom_music = udf(extract_music, StringType())
@@ -128,43 +228,12 @@ custom_release = udf(extract_release_date, StringType())
 spark.udf.register("list_contains_any", list_contains_any)
 custom_director_udf = udf(find_director, ArrayType(StringType()))
 
-extracted_data = filtered_film_data \
-    .withColumn("title_wiki", custom_title_udf(col("title"))) \
-    .withColumn("director_wiki", custom_director_udf(col("revision.text._VALUE"))) \
-    .withColumn("music", custom_music(col("revision.text._VALUE"))) \
-    .withColumn("release", custom_release(col("revision.text._VALUE"))) \
-    .select("title_wiki", "director_wiki", 'music', 'release')
+#dataframe holding extracted structured data from wiki
+extracted_data = extract_data_from_wiki()
 
-crawled = load_movies()
+# movie data from imdb
+crawled_data = load_movies()
 
-initial_joined_data = crawled.join(
-    extracted_data,
-    crawled.title == extracted_data.title_wiki,
-    "left"
-)
-
-column_name = "director_wiki"
-initial_joined_data = initial_joined_data.withColumn(column_name,
-                                            F.when(initial_joined_data[column_name].isNull(),
-                                            create_array()).otherwise(initial_joined_data[column_name]))
-
-
-final_joined_data = initial_joined_data \
-    .where(
-        (check_intersection(initial_joined_data.director_list, initial_joined_data.director_wiki))
-)
-
-def precision_recall():
-
-    precia = load_movies().toPandas()
-    precib = pd.read_csv("final_merged.csv.csv")
-
-    true_positives = len(precib)
-    false_positives = len(precia) - true_positives
-    false_negatives = len(extracted_data.toPandas()) - true_positives
-
-    precision = true_positives / (true_positives + false_positives)
-    recall = true_positives / (true_positives + false_negatives)
-
-
-final_joined_data.toPandas().to_csv('merged.csv', index=False)
+final_joined_data = join_df(extracted_data,crawled_data)
+final_joined_data.toPandas().to_csv('small_merged.csv', index=False)
+precision_recall()
