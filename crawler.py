@@ -5,7 +5,7 @@ from collections import deque
 import pandas as pd
 import time
 from pathlib import Path
-#
+
 def get_dataframe_size_megabytes(dataframe):
     return dataframe.memory_usage(deep=True).sum() / (1024 * 1024)
 
@@ -16,7 +16,6 @@ def save_data_to_csv(df_no_duplicates_subset,file):
             df_combined = pd.concat([df_existing, df_no_duplicates_subset]).drop_duplicates(subset=['url'])
             df_combined.to_csv(file, index=False)
 
-            # df_no_duplicates_subset.to_csv('extraction_movies.csv', mode='a', index=False, header=False)
         except Exception as e:
             print(f"Error writing to CSV: {e}")
     else:
@@ -27,13 +26,9 @@ def save_data_to_csv(df_no_duplicates_subset,file):
     size_mb = size_bytes / (1024 * 1024)
     print(f"Size of '{extraction_file}': {size_mb:.2f} MB")
 
-    # if size_mb > 300:
-    #     print(f"Size of '{extraction_file}': {size_mb:.2f} MB")
-    #     return 1
-    # else:
-    #     return 0
 
 
+# function crawls imdb domain and extracts uls from the responses. Returns df of responses
 def crawl(url,responses_df,movie_tv_df, size):
     hdr = {
         'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Mobile Safari/537.36',
@@ -112,7 +107,7 @@ def is_valid_url(url):
     else:
         return -1
 
-
+# new row is created from extracted data
 def create_new_row(url,titleMatch,directors,matches,movie_tv_df):
     if directors and titleMatch and url:
         new_row = {'url': url.strip(), 'title': titleMatch.group(1).strip(), 'director': directors, 'cast': matches}
@@ -123,6 +118,7 @@ def create_new_row(url,titleMatch,directors,matches,movie_tv_df):
                 print("URL:",url)
                 movie_tv_df.loc[len(movie_tv_df)] = new_row
 
+# func extract titile, director, cast
 def movie_series_parser(url,html_content,movie_tv_df):
     if 'title' in url:
         titleReg = r'<title>(.*?)\((.*?) - IMDb<\/title'
@@ -165,6 +161,7 @@ def parse(df,movie_tv_df):
         elif tmp == 1:
             movie_series_parser(url_value,html_content,movie_tv_df)
 
+# function to open csvs or create new ones
 def open_csv_files(file):
     if os.path.exists(file):
         try:
@@ -205,8 +202,6 @@ def init_crawl(url):
     responses_df = open_csv_files("responses.csv")
     movie_tv_df = open_csv_files("extraction_movies.csv")
     size = 500
-
-    #crawlresp(url_list,responses_df)
     crawl(url,responses_df,movie_tv_df,size)
     save_data_to_csv(responses_df,"responses.csv")
     parse(responses_df,movie_tv_df)
@@ -215,21 +210,17 @@ def init_crawl(url):
 
     return
 
+# parsing is not punctional, the data needs to be cleaned
 def clear_parse_data(df):
     for column in ['director', 'title']:
         movie_tv_df[column] = movie_tv_df[column].str.replace('&#x27;', "'")
         movie_tv_df[column] = movie_tv_df[column].str.replace('&quot;', '"')
-        df[column] = df[column].str.replace('\s+', ' ',regex=True)  # Replace consecutive white spaces with a single space
+        df[column] = df[column].str.replace('\s+', ' ',regex=True)
         df[column] = df[column].str.strip()
     movie_tv_df["director"] = movie_tv_df["director"].apply(lambda x: [director.strip() for director in x.split(',')])
     df.to_csv("extraction_movies_modified.csv", index=False)
     return df
 
-#init_crawl('https://www.imdb.com/')
-
-movie_tv_df = pd.read_csv("extraction_movies_modified.csv")
-cleared = clear_parse_data(movie_tv_df)
-#
-#
-record_9_directors = cleared.loc[6, 'director']
-print(f"Directors for the 9th record: {record_9_directors}")
+init_crawl('https://www.imdb.com/')
+movie_tv_df = pd.read_csv("extraction_movies.csv")
+clear_parse_data(movie_tv_df)
