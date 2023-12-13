@@ -11,6 +11,9 @@ V 2. časti parsujem informácie z dát ktoré som nacrawloval v prvej časti. I
 Táto tabuľka obsahuje 874 MB dát, z ktorých bolo treba vyfiltrovať filmy. V každej iterácii kontrolujem či url je url stránky filmu/seriálu - obsahuje string title.
 Bolo treba ušetriť aby restrictedWords neboli v url, lebo tie stránky neobsahovali informácie ktoré som hľadal. Keď url je správny, tak začína sa parsovaie pomocou regexu.
 Výsledné informácie sú uložené do tabuľky. Parsované dáta sú: návoz filmu, režisér a cast. Tabuľka parsovaných filmov obsahovala 710 filmov.
+Vo vypracovaní 1. časti som čerpal informácie z tohto článku:
+Peshave, M., & Dezhgosha, K. (n.d.). HOW SEARCH ENGINES WORK AND A WEB CRAWLER APPLICATION.
+
 
 # Parovanie s Wiki dáta
 Druhé zadanie bolo prelinkovanie týchto dát pomocou sparku s informáciami z Wikipédii. Na začiatku bolo treba nainštalovať spark a hadoop.
