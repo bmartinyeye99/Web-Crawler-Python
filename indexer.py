@@ -126,7 +126,6 @@ def string_in_values_test(search_string, index_dir):
 
 
 def search_index(keyword, index_dir):
-    # Open the index
     index = open_dir(index_dir)
     # Create a searcher object
     searcher = index.searcher(weighting=scoring.TF_IDF())

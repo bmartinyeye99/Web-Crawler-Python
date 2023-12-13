@@ -16,10 +16,9 @@ from sklearn.metrics import precision_score, recall_score
 
 SMALL_XML = 'enwiki-latest-pages-articles17.xml-p20570393p22070392'
 BIG_XML = 'enwiki-latest-pages-articles.xml'
+
 def list_contains_any(element, target_list):
     return any(e in target_list for e in element)
-
-
 
 def format_date(title):
     result_string = re.sub(r'\([^)]*\)', '', title).strip()
@@ -37,6 +36,7 @@ def find_director(text):
     else:
         return ['not found']
 
+
 def extract_music(text):
     pattern_for_more = r"\|\s*music\s*=\s*{{plainlist\|([\s\S]*?)\s*}}"
     patter_for_one = 'music\s*=\s*\[\[(.*)\]\]'
@@ -51,6 +51,8 @@ def extract_music(text):
         return [result.group(1)] if result else err
     else:
         return err
+
+# function extracts realease year, it matches 3 types of definitions, return the found one
 def extract_release_date(text):
     pattern = r'released\s*=\s*{{[a-zA-Z|\s]*\|(\d{4})\|'
     pattern_two = r'released\s*=\s*\d [a-zA-Z]* (\d{4})'
@@ -124,7 +126,7 @@ def load_wiki_data():
     )
     return filtered_film_data
 
-# function extracts searched data from the pool of wiki movie infoboxes
+# function extracts searched data from the p infoboxes of the raw wiki code
 def extract_data_from_wiki():
     extracted_data = movie_wiki_dadta \
         .withColumn("title_wiki", custom_title_udf(col("title"))) \
@@ -134,20 +136,9 @@ def extract_data_from_wiki():
         .select("title_wiki", "director_wiki", 'music', 'release')
     return extracted_data
 
-# joins wiki and imdb data on matching director and title columns
-# def join_df(extracted_data,crawled_data):
-#     initial_joined_data = (crawled_data.join(extracted_data,crawled_data.title == extracted_data.title_wiki,"leftouter"))
-#     column_name = "director_wiki"
-#     initial_joined_data = initial_joined_data.withColumn(column_name,
-#                                                          F.when(initial_joined_data[column_name].isNull(),
-#                                                                 create_array()).otherwise(
-#                                                              initial_joined_data[column_name]))
-#     final_joined_data = initial_joined_data \
-#         .where(
-#         (check_intersection(initial_joined_data.director_list, initial_joined_data.director_wiki))
-#     )
-#     return final_joined_data
 
+# func. joins imdb and wiki data based on matches on directors and title, directors need to
+# be checked, because if titles match, it does not mean that it is the same movie
 def join_df(extracted_data, crawled_data):
     initial_joined_data = crawled_data.join(
         extracted_data,
@@ -175,23 +166,21 @@ def join_df(extracted_data, crawled_data):
 
     return final_joined_data
 
+# function na PR calculation
 def precision_recall():
     merged_df = pd.read_csv("small_merged.csv")
     # methond 1
     ###########
-    # Step 1: Identify True Positives (TP)
     true_positives = merged_df[['director_list', 'director_wiki']].dropna().apply(
         lambda x: x[0].lower() == x[1].lower(), axis=1).sum()
 
-    # Step 2: Identify False Positives (FP)
     false_positives = len(merged_df) - true_positives
-    # Step 3: Identify False Negatives (FN)
     false_negatives = merged_df[['title_wiki', 'title']].apply(
         lambda x: pd.notna(x[0]) and pd.notna(x[1]) and not (x[0].lower() == x[1].lower()), axis=1).sum()
-    # Step 4: Calculate Precision
+
     precision_denominator = true_positives + false_positives
     precision = true_positives / precision_denominator if precision_denominator > 0 else 0
-    # Step 5: Calculate Recall
+
     recall_denominator = true_positives + false_negatives
     recall = true_positives / recall_denominator if recall_denominator > 0 else 0
     print(f"Precision: {precision:.2f}")
@@ -220,7 +209,7 @@ spark = SparkSession.builder.config("spark.jars.packages", "com.databricks:spark
 #loading data from dump
 movie_wiki_dadta = load_wiki_data()
 
-# defining custom udf functions
+# defining custom udf functions for data extractions
 custom_title_udf = udf(format_date, StringType())
 custom_director_udf = udf(find_director, StringType())
 custom_music = udf(extract_music, StringType())
